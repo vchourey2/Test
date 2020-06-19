@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
+	xmlns:os="http://www.mulesoft.org/schema/mule/os" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="b6312a52-a35a-4a8b-ae70-5a0e88422b2d" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<os:object-store name="Object_store" doc:name="Object store" doc:id="2d5824d7-dd71-4b79-89f0-2b32e5a9cd35" />
+	<salesforce:sfdc-config name="Salesforce_Config" doc:name="Salesforce Config" doc:id="122421ad-28cc-432c-96e1-dc088727192a" >
+		<salesforce:basic-connection username="vaibhav.chourey@infobeans.com" password="Infobeans@123" securityToken="OYqWuQgR8VMrT4IzHJtU4NcSx"/>
+	</salesforce:sfdc-config>
+	<db:config name="Database_Config" doc:name="Database Config" doc:id="f6bafc5f-0317-42a4-849e-1aeaa0ec88eb" >
+		<db:mssql-connection host="IB-SEZ-PC-283" instanceName="SQL2016DEV" port="52777" user="sa" password="server.123" databaseName="SalesforceDB"/>
+	</db:config>
+	<flow name="task1-1Flow" doc:id="8ce6a9a0-d3e9-4d7a-be6a-fdd07478fb59" >
+		<http:listener doc:name="Listener" doc:id="baa8667f-2d06-40f3-aae2-52f3dbde1bc2" config-ref="HTTP_Listener_config" path="/task1"/>
+		<os:retrieve doc:name="Retrieve" doc:id="6bbe4a86-ea99-4a82-a7df-665938837e83" key="lastrun" target="lastrun" objectStore="Object_store">
+			<os:default-value ><![CDATA[#['2018-09-11T00:00:00.000Z']]]></os:default-value>
+		</os:retrieve>
+		<salesforce:query doc:name="Query" doc:id="4b976f6a-0b2d-4279-935c-ca205e9cf132" config-ref="Salesforce_Config">
+			<salesforce:salesforce-query ><![CDATA[Select  Id, FirstName,LastName, Email,Phone,LastModifiedDate from Contact where LastModifiedDate > :LastModifiedDate ]]></salesforce:salesforce-query>
+			<salesforce:parameters ><![CDATA[#[output application/java
+---
+{
+	"LastModifiedDate" : vars.lastrun
+}]]]></salesforce:parameters>
+		</salesforce:query>
+		<os:store doc:name="Store" doc:id="7b83a874-fab6-4881-a2d6-e0b71fe429b0" key="lastrun" objectStore="Object_store">
+			<os:value><![CDATA[#[(now() >> "UTC") as String {format:"yyyy-MM-dd'T'HH:mm:ssZ"}]]]></os:value>
+		</os:store>
+		<ee:transform doc:name="Transform Message" doc:id="3aced61b-d1ee-4bb1-b1f4-e355e6e67a6e">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+payload map
+{
+	Id: $.Id,
+	FirstName: $.FirstName,
+	LastName: $.LastName,
+	Phone: $.Phone,
+	Email: $.Email,
+	CreatedDate: $.LastModifiedDate
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<db:bulk-insert doc:name="Bulk insert" doc:id="b25fb79f-c058-4bc7-befd-216fc47f9d90" config-ref="Database_Config">
+			<db:sql ><![CDATA[Insert Into Customer (Id,FirstName,LastName,Phone,Email,CreatedDate) values (:Id,:FirstName,:LastName,:Phone,:Email,:CreatedDate)]]></db:sql>
+		</db:bulk-insert>
+		<logger level="INFO" doc:name="Logger" doc:id="21443d27-d8f7-40ff-b066-3fd5222d59aa" />
+		<set-payload value='"Data Inserted successfully"' doc:name="Set Payload" doc:id="e4980ed1-f6ab-4877-9165-f2183037d9fb" />
+	</flow>
+</mule>
